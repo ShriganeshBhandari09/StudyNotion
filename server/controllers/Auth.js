@@ -1,7 +1,9 @@
 const User = require("../models/User");
 const OTP = require("../models/OTP");
 const OTPGenerator = require("otp-generator");
-const bcrypt = require("bcrypt")
+const bcrypt = require("bcrypt");
+const jwt = require("jsonwebtoken");
+require("dotenv").config();
 
 //sendOTP
 exports.sendOTP = async (req, res) => {
@@ -150,7 +152,6 @@ exports.signUp = async (req, res) => {
       success: true,
       message: "User is registered Successfully",
     });
-
   } catch (error) {
     console.log(error);
     return res.status(500).json({
@@ -161,5 +162,64 @@ exports.signUp = async (req, res) => {
 };
 
 //LoginIn
+exports.login = async (req, res) => {
+  try {
+    //get date for req body
+    const { email, password } = req.body;
+    //validation data
+
+    if (!email || !password) {
+      res.status(403).json({
+        success: false,
+        message: "All fields are reuired",
+      });
+    }
+    //user check exist or not
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: "User is not registered",
+      });
+    }
+    //Generate JWT, after password matching
+    if (await bcrypt.compare(password, user.password)) {
+      const payload = {
+        email: user.email,
+        id: user._id,
+        role: user.role,
+      };
+      const token = jwt.sign(payload, process.env.JWT_SECRET, {
+        expiresIn: "2h",
+      });
+      user.token = token;
+      user.password = undefined;
+
+      //create cookies and send response
+      const options = {
+        expiresIn: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
+        httpOnly: true,
+      };
+
+      res.cookie("token", token, options).status(200).json({
+        success: true,
+        token,
+        user,
+        message: "User Logged in Successfully",
+      });
+    } else {
+      return res.status(401).json({
+        success: false,
+        message: "Password is Incorrect",
+      });
+    }
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({
+      success: false,
+      message: "Login Unsuccessfull",
+    });
+  }
+};
 
 //changePassword
